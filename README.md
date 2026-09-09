@@ -55,8 +55,6 @@ The reported experiment corresponds to an immutable Git reference:
 ```text
 Git branch: v2
 Git tag:    v2-study-2026
-Git commit: (to be recorded after data collection concludes)
-DOI:        (to be assigned via Zenodo after study completion)
 ```
 
 Do not reproduce the reported study from an arbitrary later commit on `v2`.
