@@ -27,20 +27,18 @@ The original Railway production deployment used during data collection has been 
 ```bash
 git clone https://github.com/ParthMody/SARAL.git
 cd SARAL
-git checkout <<< FILL: study tag, e.g. v2-study-2026 >>>
+git checkout v2-study-2026
 
 python -m venv .venv
 source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
 pip install --upgrade pip
 pip install -r requirements.txt
 
-docker run -d --name saral-db -e POSTGRES_PASSWORD=saral -p 5432:5432 postgres:<<< FILL: version >>>
+docker run -d --name saral-db -e POSTGRES_PASSWORD=saral -p 5432:5432 postgres:16
 export SARAL_ENV=development
 export DATABASE_URL=postgresql://postgres:saral@localhost:5432/postgres
 
-alembic upgrade head
-python scripts/seed_cases.py
-python scripts/verify_stimuli.py   # confirms the loaded stimulus set matches the study
+python -m scripts.seed_vignettes
 uvicorn app.main:app --reload
 ```
 
@@ -56,9 +54,9 @@ The reported experiment corresponds to an immutable Git reference:
 
 ```text
 Git branch: v2
-Git tag:    <<< FILL: study tag >>>
-Git commit: <<< FILL: full 40-character SHA >>>
-DOI:        <<< FILL: Zenodo DOI for the frozen release >>>
+Git tag:    v2-study-2026
+Git commit: (to be recorded after data collection concludes)
+DOI:        (to be assigned via Zenodo after study completion)
 ```
 
 Do not reproduce the reported study from an arbitrary later commit on `v2`.
@@ -83,25 +81,28 @@ The machine recommendation derives from the structured record alone. The reviewe
 
 ### Factors
 
-**Algorithm recommendation** — `APPROVE` / `REJECT`
+**Algorithm recommendation** — `APPROVE` / `REJECT` (fixed per vignette profile)
 
-**Direction of contextual evidence** — `WITH` the recommendation / `AGAINST` the recommendation
+**Arm** — `CONTROL` (neutral procedural field note) / `TREATMENT` (contextual field signal present)
 
-**<<< FILL: third factor >>>** — <<< FILL: levels >>>
+**Signal direction** (nested within treatment) — `WITH` the recommendation / `AGAINST` the recommendation
 
-> **This section needs your correction before publication.** The previous draft described the study as 2 × 2 × 2, then listed the third factor as CONTROL (no direction of contextual evidence) versus TREATMENT (direction present). If direction is undefined under control, direction is nested within arm rather than crossed with it, which is not a 2 × 2 × 2. Either name the actual third crossed factor here, or describe the structure accurately (e.g. "2 × 2 factorial plus a no-context control"). The cell table below and the twelve-cases-per-participant figure must both follow from whatever you state.
+The design is a **2 (recommendation: approve/reject) × 2 (arm: control/treatment) within-subject factorial**, with signal direction nested within the treatment arm. Signal direction is undefined for control cases because the control field note carries no directional content. The primary treatment contrast is presence versus absence of a contextual signal. The secondary contrast — signal direction — is the moderator that identifies whether reinforcing and contradicting signals produce symmetric or asymmetric override behaviour.
+
+This is not a fully crossed 2 × 2 × 2. Direction is a property of the treatment signal, not an independently manipulated factor. Control cases contribute to the main-effect estimate; direction contrasts are estimated within the treatment arm only.
 
 ### Cells
 
-| Recommendation | Field signal | Interpretation |
-|---|---|---|
-| APPROVE | WITH | Context supports approval |
-| APPROVE | AGAINST | Context introduces evidence against approval |
-| REJECT | WITH | Context supports rejection |
-| REJECT | AGAINST | Context introduces evidence against rejection |
-| <<< FILL: control cells >>> | | |
+| Arm | Recommendation | Signal direction | Profiles | Interpretation |
+|---|---|---|---|---|
+| Treatment | APPROVE | WITH | 3, 4, 10, 15 | Context supports approval |
+| Treatment | APPROVE | AGAINST | 7, 8, 13, 14 | Context introduces doubt about approval |
+| Treatment | REJECT | WITH | 1, 2, 5, 11 | Context supports rejection |
+| Treatment | REJECT | AGAINST | 6, 9, 12, 16 | Context introduces doubt about rejection |
+| Control | APPROVE | — | 3, 4, 7, 8, 10, 13, 14, 15 | Neutral note, no directional signal |
+| Control | REJECT | — | 1, 2, 5, 6, 9, 11, 12, 16 | Neutral note, no directional signal |
 
-Each participant reviews twelve cases in randomised order. <<< FILL: one sentence stating how twelve cases map onto the cells — e.g. how many replicates per cell, and whether control cases are interleaved. >>>
+Each participant reviews twelve cases in randomised order. Twelve cases are drawn from sixteen profiles: six assigned to control and six to treatment. Within each arm, three cases carry an APPROVE recommendation and three carry REJECT, giving a balanced 3/3/3/3 split across the four recommendation × arm cells per participant. Treatment cases span the four direction cells; the exact coverage depends on the random draw.
 
 All experimental applicant profiles are composite, inspired by the field deployment (Phase 1). No profile corresponds to a real welfare applicant.
 
@@ -131,14 +132,16 @@ Escalation is coded as override rather than compliance. The instrument records t
 
 ## Session flow
 
-1. **Consent** — participant information sheet and informed consent.
-2. **Briefing** — the welfare scheme, eligibility rule, machine recommendation, field information, and the three available decisions.
-3. **Practice case** — not recorded; familiarises the participant with the interface.
-4. **Comprehension check** — gated item confirming the participant can interpret the case record and field information. Up to two attempts; a pass is required to continue.
-5. **Twelve experimental cases** — randomised order. Decisions are final on submission. A reference panel with the relevant rules and definitions is available during each case.
-6. **Post-task survey** — field-note salience, standout observations, decision confidence.
+1. **Consent** — participant information sheet (linked) and digital informed consent with server-side timestamp.
+2. **Demographics** — education level, occupation category, years of relevant experience, country of residence.
+3. **Briefing** — the welfare scheme, eligibility rule (pre-2011 cutoff), accepted proof types, common disqualifications, machine recommendation, field information, and the three available decisions.
+4. **Practice case** — not recorded; familiarises the participant with the interface.
+5. **Comprehension check** — case-based item presenting an unambiguous rejection case (post-cutoff arrival, no pre-cutoff proof, newly constructed structure, REJECT recommendation). The participant must select the correct decision. Up to two attempts; participants who fail both proceed but are flagged in the audit log.
+6. **Twelve experimental cases** — randomised order. Decisions are final on submission. A reference panel with eligibility rules and definitions is available via a persistent help button during each case. A one-time tooltip after Case 1 notifies the participant of the help panel.
+7. **Post-task survey** — field-note salience (1–5), standout observations (1–5), decision confidence (1–5), open-ended feedback.
+8. **Completion** — unique reference code displayed; automatic redirect to Prolific after five-second countdown.
 
-For every experimental case, SARAL records the participant/session identifier, vignette identifier, experimental condition, machine recommendation, field-context presentation, reviewer decision, written rationale, and response timing.
+For every experimental case, SARAL records the participant/session identifier, Prolific ID, vignette identifier, experimental condition, machine recommendation, field-context presentation, reviewer decision, written rationale (optional), and response timing (total response time, time to first action, time after decision selection).
 
 Randomisation, assignment, and outcome recording are handled server-side. Participants never see treatment labels or assignment metadata.
 
@@ -150,13 +153,13 @@ Assignment is handled by the application, not manually. The application controls
 
 In the reported study:
 
-- **Unit of randomisation:** <<< FILL: session or case >>>
-- **Case order:** <<< FILL: how order is randomised >>>
-- **Vignette selection:** <<< FILL: with or without replacement >>>
-- **Cell representation within a session:** <<< FILL: how the cells appear across the twelve cases >>>
-- **Balancing constraints:** <<< FILL: any composition constraints, or "none" >>>
+- **Unit of randomisation:** Case-level within participant. Each participant is both control and treatment (within-subject design).
+- **Case order:** Randomly shuffled per session using a logged integer seed.
+- **Vignette selection:** Without replacement. Twelve profiles drawn from sixteen; each profile appears at most once per session.
+- **Cell representation within a session:** Exactly six control cases and six treatment cases. Within each arm, three APPROVE-recommended and three REJECT-recommended cases.
+- **Balancing constraints:** 3 control-approve + 3 control-reject + 3 treatment-approve + 3 treatment-reject per session. No participant sees both the control and treatment version of the same profile.
 
-Randomisation is non-deterministic. Exact reproduction means reproducing the **assignment mechanism**, not the specific random sequence any original participant saw.
+Randomisation is non-deterministic. The random seed is logged per session for auditability. Exact reproduction means reproducing the **assignment mechanism**, not the specific random sequence any original participant saw.
 
 The implementation is in the v2 application code; the procedure is documented in [`DESIGN.md`](./DESIGN.md).
 
@@ -167,17 +170,24 @@ The implementation is in the v2 application code; the procedure is documented in
 ```text
 SARAL/
 ├── app/                 # Experimental application
-├── docs/                # Supporting technical/research documentation
-├── migrations/          # Database migrations
-├── scripts/             # Database and experiment utilities
-├── saralv1/             # Preserved earlier implementation — not used for v2 reproduction
-├── DESIGN.md            # Experimental design and v1 → v2 history
-├── README.md
-├── alembic.ini
-└── requirements.txt
+│   ├── main.py          # FastAPI app entry point
+│   ├── models.py        # SQLAlchemy data model
+│   ├── db.py            # Database configuration
+│   ├── settings.py      # Application settings
+│   ├── audit.py         # Audit logging
+│   ├── routes/          # Route handlers
+│   │   ├── dashboard.py # Landing, consent, demographics
+│   │   ├── session.py   # Briefing, practice, cases, survey, completion
+│   │   └── admin.py     # Admin panel, CSV exports
+│   └── templates/       # Jinja2 HTML templates
+├── docs/                # Consent materials, data security protocol, codebook
+├── scripts/
+│   └── seed_vignettes.py# Loads the versioned stimulus set
+├── Procfile             # Railway deployment start command
+├── requirements.txt     # Pinned dependencies
+├── runtime.txt          # Python version pin
+└── README.md
 ```
-
-`saralv1/` is preserved for design history only. Do not use it when reproducing the v2 experiment.
 
 ---
 
@@ -185,8 +195,9 @@ SARAL/
 
 The study ran on:
 
-- **Python** <<< FILL: exact version, e.g. 3.11.9 >>>
-- **PostgreSQL** <<< FILL: version >>>
+- **Python** 3.13.13
+- **PostgreSQL** 16 (Railway-managed instance)
+- **Hosting** Railway Hobby plan, US West (California), `saral-production.up.railway.app`
 - Dependency versions pinned in `requirements.txt`
 
 `requirements.txt` pins exact versions. Do not relax the pins when reproducing the reported study.
@@ -206,22 +217,50 @@ SQLite differs from PostgreSQL in type affinity and constraint enforcement. Use 
 
 ### Configuration
 
-`DATABASE_URL` and `SARAL_ENV` are the only variables required for local reproduction. Copy `.env.example` to `.env` if you prefer a file-based configuration. No production secret is needed to reproduce the experimental behaviour locally.
+| Variable | Purpose | Required |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL or SQLite connection string | Yes |
+| `SARAL_ENV` | `development` or `production` | Yes |
+| `SARAL_ADMIN_SECRET` | Admin panel passcode | Production only |
+| `PROLIFIC_COMPLETION_URL` | Prolific redirect URL with study code | Production only |
+| `PIS_URL` | Participant Information Sheet URL | Production only |
+
+Copy `.env.example` to `.env` if you prefer a file-based configuration. No production secret is needed to reproduce the experimental behaviour locally.
 
 ---
 
 ## Verifying a reproduction
 
-After seeding, `scripts/verify_stimuli.py` confirms that the loaded stimulus set matches the study. It checks:
+After seeding, confirm the loaded stimulus set matches the study:
 
-- vignette count: <<< FILL: N >>>
-- cases per condition: <<< FILL: counts >>>
-- SHA-256 of the canonicalised stimulus set: <<< FILL: hash >>>
+```bash
+python -c "
+from app.db import SessionLocal
+from app.models import Vignette, ArmEnum, AlgoRecommendationEnum
+db = SessionLocal()
+vigs = db.query(Vignette).all()
+assert len(vigs) == 32, f'Expected 32, got {len(vigs)}'
+assert len(set(v.pair_id for v in vigs)) == 16
+assert sum(1 for v in vigs if v.arm == ArmEnum.CONTROL) == 16
+assert sum(1 for v in vigs if v.arm == ArmEnum.TREATMENT) == 16
+assert sum(1 for v in vigs if v.algo_recommendation == AlgoRecommendationEnum.APPROVE) == 16
+assert sum(1 for v in vigs if v.algo_recommendation == AlgoRecommendationEnum.REJECT) == 16
+print('Stimulus set verified: 32 vignettes, 16 profiles, balanced 16/16 by arm and recommendation')
+db.close()
+"
+```
+
+Expected:
+- Vignettes: 32
+- Profiles: 16 (pair_id 1–16)
+- Control: 16, Treatment: 16
+- Approve: 16, Reject: 16
+- Pool version: `v2.4-mumbai-final`
 
 A correct reproduction lets a researcher complete the same participant-facing sequence used in the study:
 
 ```text
-Consent → Briefing → Practice case → Comprehension check → 12 cases → Post-task survey
+Consent → Demographics → Briefing → Practice → Comprehension check → 12 cases → Survey → Completion
 ```
 
 ---
@@ -232,11 +271,11 @@ A valid reproduction of the v2 experiment holds the following fixed.
 
 **Software** — study Git tag/commit; Python version; dependency versions; database schema; application logic.
 
-**Experimental materials** — vignette set; structured applicant records; recommendation assignments; field-note variants; condition definitions; eligibility rules; participant instructions; practice case; comprehension-check content; post-task survey.
+**Experimental materials** — vignette set (16 profiles × 2 arms = 32 vignette objects); structured applicant records; recommendation assignments; field-note variants (control and treatment); condition definitions; eligibility rules grounded in GR ZoPuDho-0810/Pr.Kr.96/2018/ZoPaSu-1; participant instructions; practice case; comprehension-check content; post-task survey items.
 
-**Procedure** — twelve cases per participant; randomisation and assignment logic; presentation order; response options; final-on-submission behaviour; timing capture; written-rationale collection.
+**Procedure** — twelve cases per participant; within-subject 6 control + 6 treatment assignment; randomisation and assignment logic; presentation order; response options (approve/reject/escalate); final-on-submission behaviour; timing capture (response time, time to first action, time after decision); optional written-rationale collection.
 
-**Analysis** (research archive) — inclusion and exclusion rules; timing thresholds; outcome coding; repeated-measures structure; estimator specification; robustness checks; figure and table generation.
+**Analysis** (research archive) — inclusion and exclusion rules; timing thresholds (fast response < 8 seconds, minimum session duration 5 minutes); outcome coding (override = decision ≠ recommendation); repeated-measures structure; estimator specification; robustness checks; figure and table generation.
 
 ---
 
@@ -244,7 +283,9 @@ A valid reproduction of the v2 experiment holds the following fixed.
 
 The vignette pool is a fixed research artifact. Each vignette combines a structured applicant profile, a machine recommendation, a field observation, and a defined relationship between field signal and recommendation.
 
-`scripts/seed_cases.py` loads the versioned v2 stimuli; it does not generate cases probabilistically. Each vignette preserves its study-defined identifier, structured record, recommendation, field-note content, condition, signal direction, arm, and assignment metadata.
+`scripts/seed_vignettes.py` loads the versioned v2 stimuli; it does not generate cases probabilistically. Each vignette preserves its study-defined profile identifier (pair_id), structured record, recommendation, field-note content (English), condition, signal direction, arm, and pool version.
+
+All sixteen profiles are grounded in GR ZoPuDho-0810/Pr.Kr.96/2018/ZoPaSu-1 (Maharashtra SRA eligibility framework). Treatment signals are paraphrased from the Phase 1 verification corpus (260 PMAY field observations, Maharashtra, 2026) and GR-documented disqualification clauses (D1–D4, VP1–VP6, Track A/B). Control notes are neutral procedural verification statements matched in length and format.
 
 The stimulus set used in the reported study is immutable. Any substantive revision creates a new version rather than replacing the original.
 
@@ -274,7 +315,7 @@ Context available only to reviewer
 Human decision
 ```
 
-The architecture adapts to another domain by replacing the stimulus set while preserving recommendation presentation, contextual-evidence presentation, randomisation, decision recording, escalation, timing capture, and rationale collection.
+The architecture adapts to another domain by replacing the stimulus set (vignette pool in `scripts/seed_vignettes.py`, briefing content, help panel definitions, comprehension check case, profile field labels in `routes/session.py`) while preserving recommendation presentation, contextual-evidence presentation, randomisation, decision recording, escalation, timing capture, and rationale collection.
 
 A modified stimulus set constitutes a new experimental version and does not overwrite the materials used in the reported welfare experiment.
 
@@ -308,7 +349,7 @@ Departure from an algorithmic recommendation is not automatically algorithm aver
 
 ## Citation
 
-> Mody, P. (2026). *SARAL: Field-Generated Context and Algorithmic Override in Welfare Decision-Making* (working paper). [](https://static1.squarespace.com/static/68d08a08b06391749b62502d/t/6a951205dfa7a85a69d4450c/1788154373626/When-Context-Contradicts-Algorithm_Draft1.pdf)
+> Mody, P. (2026). *When Context Contradicts the Algorithm: Conditional Reliance and the Anatomy of Override in Welfare Decisions* (working paper). [parthmody.me/saral-materials](https://www.parthmody.me/saral-materials)
 
 ---
 
