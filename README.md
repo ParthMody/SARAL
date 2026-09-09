@@ -2,25 +2,70 @@
 
 **A reproducible experimental platform for studying how administrative reviewers integrate machine recommendations with field context.**
 
-SARAL presents welfare-eligibility cases to a reviewer alongside a rule-based recommendation and contextual field information, then records whether the reviewer approves, rejects, or escalates the case and why.
+SARAL presents welfare-eligibility cases to a reviewer alongside a rule-based recommendation and contextual field information, then records whether the reviewer approves, rejects, or escalates the case, and why.
 
-The platform was developed to study when and how human reviewers depart from algorithmic recommendations when they possess information unavailable to the algorithm.
+The platform was built to study when and how human reviewers depart from algorithmic recommendations when they hold information the algorithm cannot observe.
 
-This repository preserves the **v2 experimental instrument** used for the pre-registered study.
+This repository preserves the **v2 experimental instrument** used for the pre-registered study. The experimental design and the v1 → v2 history are documented in [`DESIGN.md`](./DESIGN.md).
 
-For the full experimental design and the transition from the original field deployment to the controlled experiment, see [`DESIGN.md`](./DESIGN.md).
+---
 
 ## Research materials
 
-Paper, pre-registration, amendment, consent materials, governance protocol, de-identified data, and analysis code:
+Paper, pre-registration and amendment, consent materials, governance protocol, de-identified data, and analysis code:
 
-[parthmody.me/saral-materials](https://www.parthmody.me/saral-materials)
+**[parthmody.me/saral-materials](https://www.parthmody.me/saral-materials)**
+
+This repository reproduces the **experimental instrument**. The research archive reproduces the **study data and analysis**. The two layers are kept separate so that the participant-facing environment is not conflated with downstream statistical analysis.
 
 The original Railway production deployment used during data collection has been retired. The instrument remains reproducible from this repository.
 
 ---
 
-# Experimental design
+## Quickstart
+
+```bash
+git clone https://github.com/ParthMody/SARAL.git
+cd SARAL
+git checkout <<< FILL: study tag, e.g. v2-study-2026 >>>
+
+python -m venv .venv
+source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
+pip install --upgrade pip
+pip install -r requirements.txt
+
+docker run -d --name saral-db -e POSTGRES_PASSWORD=saral -p 5432:5432 postgres:<<< FILL: version >>>
+export SARAL_ENV=development
+export DATABASE_URL=postgresql://postgres:saral@localhost:5432/postgres
+
+alembic upgrade head
+python scripts/seed_cases.py
+python scripts/verify_stimuli.py   # confirms the loaded stimulus set matches the study
+uvicorn app.main:app --reload
+```
+
+The application is then available at `http://127.0.0.1:8000`.
+
+Check out the **study tag**, not the `v2` branch. The branch continues to evolve; the tag defines the instrument used in the reported study.
+
+---
+
+## Frozen study version
+
+The reported experiment corresponds to an immutable Git reference:
+
+```text
+Git branch: v2
+Git tag:    <<< FILL: study tag >>>
+Git commit: <<< FILL: full 40-character SHA >>>
+DOI:        <<< FILL: Zenodo DOI for the frozen release >>>
+```
+
+Do not reproduce the reported study from an arbitrary later commit on `v2`.
+
+---
+
+## Experimental design
 
 The core decision structure is:
 
@@ -34,25 +79,19 @@ Reviewer-only field context
 Human decision
 ```
 
-The machine recommendation is derived from the structured record alone.
+The machine recommendation derives from the structured record alone. The reviewer additionally sees contextual evidence unavailable to the machine.
 
-The reviewer additionally sees contextual evidence that is unavailable to the machine.
+### Factors
 
-The v2 experiment uses a **2 × 2 within-subject design**.
+**Algorithm recommendation** — `APPROVE` / `REJECT`
 
-## Experimental factors
+**Direction of contextual evidence** — `WITH` the recommendation / `AGAINST` the recommendation
 
-### Algorithm recommendation
+**<<< FILL: third factor >>>** — <<< FILL: levels >>>
 
-- `APPROVE`
-- `REJECT`
+> **This section needs your correction before publication.** The previous draft described the study as 2 × 2 × 2, then listed the third factor as CONTROL (no direction of contextual evidence) versus TREATMENT (direction present). If direction is undefined under control, direction is nested within arm rather than crossed with it, which is not a 2 × 2 × 2. Either name the actual third crossed factor here, or describe the structure accurately (e.g. "2 × 2 factorial plus a no-context control"). The cell table below and the twelve-cases-per-participant figure must both follow from whatever you state.
 
-### Direction of contextual evidence
-
-- `WITH` the recommendation
-- `AGAINST` the recommendation
-
-This produces four conceptual combinations:
+### Cells
 
 | Recommendation | Field signal | Interpretation |
 |---|---|---|
@@ -60,18 +99,17 @@ This produces four conceptual combinations:
 | APPROVE | AGAINST | Context introduces evidence against approval |
 | REJECT | WITH | Context supports rejection |
 | REJECT | AGAINST | Context introduces evidence against rejection |
+| <<< FILL: control cells >>> | | |
 
-Each participant reviews twelve cases in randomised order.
+Each participant reviews twelve cases in randomised order. <<< FILL: one sentence stating how twelve cases map onto the cells — e.g. how many replicates per cell, and whether control cases are interleaved. >>>
 
-All experimental applicant profiles are synthetic.
+All experimental applicant profiles are composite, inspired by the field deployment (Phase 1). No profile corresponds to a real welfare applicant.
 
 ---
 
-# Outcome definition
+## Outcome definition
 
-The primary behavioural outcome is **override**.
-
-An override occurs whenever the final reviewer decision differs from the binary machine recommendation.
+The primary behavioural outcome is **override**: the final reviewer decision differs from the binary machine recommendation.
 
 | Recommendation | Reviewer decision | Override |
 |---|---|---:|
@@ -82,71 +120,49 @@ An override occurs whenever the final reviewer decision differs from the binary 
 | REJECT | APPROVE | 1 |
 | REJECT | ESCALATE | 1 |
 
-Override therefore contains two substantively distinct actions.
+Override therefore contains two substantively distinct actions:
 
-## Reversal
+- **Reversal** — the reviewer issues the opposite substantive determination (`APPROVE → REJECT`, `REJECT → APPROVE`).
+- **Escalation** — the reviewer selects `ESCALATE`, declining to issue a determination.
 
-The reviewer issues the opposite substantive determination:
-
-```text
-APPROVE → REJECT
-REJECT  → APPROVE
-```
-
-## Escalation
-
-The reviewer selects:
-
-```text
-ESCALATE
-```
-
-Escalation is coded as override rather than compliance.
-
-This distinction is central to the design because disagreement with a machine can take the form of either counter-determination or unresolved conflict.
+Escalation is coded as override rather than compliance. The instrument records the two separately so that the composition of override can be examined; the reversal/escalation decomposition is reported in the paper as a secondary, exploratory analysis.
 
 ---
 
-# Session flow
+## Session flow
 
-Each experimental session follows the same sequence.
+1. **Consent** — participant information sheet and informed consent.
+2. **Briefing** — the welfare scheme, eligibility rule, machine recommendation, field information, and the three available decisions.
+3. **Practice case** — not recorded; familiarises the participant with the interface.
+4. **Comprehension check** — gated item confirming the participant can interpret the case record and field information. Up to two attempts; a pass is required to continue.
+5. **Twelve experimental cases** — randomised order. Decisions are final on submission. A reference panel with the relevant rules and definitions is available during each case.
+6. **Post-task survey** — field-note salience, standout observations, decision confidence.
 
-1. **Consent**  
-   Participant information sheet and informed consent.
+For every experimental case, SARAL records the participant/session identifier, vignette identifier, experimental condition, machine recommendation, field-context presentation, reviewer decision, written rationale, and response timing.
 
-2. **Briefing**  
-   Explanation of the welfare scheme, eligibility rule, machine recommendation, field information, and the three available reviewer decisions.
-
-3. **Practice case**  
-   A non-recorded case used to familiarise the participant with the interface.
-
-4. **Comprehension check**  
-   A gated item confirming that the participant can correctly interpret the case record and field information. Participants receive up to two attempts and must pass to continue.
-
-5. **Experimental cases**  
-   Twelve vignettes presented in randomised order. Decisions are final once submitted. A reference panel containing the relevant rules and definitions is available during each case.
-
-6. **Post-task survey**  
-   Measures including field-note salience, standout observations, and decision confidence.
-
-For every experimental case, SARAL records:
-
-- participant/session identifier;
-- vignette identifier;
-- experimental condition;
-- machine recommendation;
-- field-context presentation;
-- reviewer decision;
-- written rationale;
-- response timing.
-
-Randomisation, assignment, and outcome recording are handled server-side.
+Randomisation, assignment, and outcome recording are handled server-side. Participants never see treatment labels or assignment metadata.
 
 ---
 
-# Repository structure
+## Randomisation and assignment
 
-The `v2` branch contains the controlled experimental instrument.
+Assignment is handled by the application, not manually. The application controls vignette selection, recommendation/context pairing, condition assignment, case order, and session-level recording.
+
+In the reported study:
+
+- **Unit of randomisation:** <<< FILL: session or case >>>
+- **Case order:** <<< FILL: how order is randomised >>>
+- **Vignette selection:** <<< FILL: with or without replacement >>>
+- **Cell representation within a session:** <<< FILL: how the cells appear across the twelve cases >>>
+- **Balancing constraints:** <<< FILL: any composition constraints, or "none" >>>
+
+Randomisation is non-deterministic. Exact reproduction means reproducing the **assignment mechanism**, not the specific random sequence any original participant saw.
+
+The implementation is in the v2 application code; the procedure is documented in [`DESIGN.md`](./DESIGN.md).
+
+---
+
+## Repository structure
 
 ```text
 SARAL/
@@ -154,304 +170,99 @@ SARAL/
 ├── docs/                # Supporting technical/research documentation
 ├── migrations/          # Database migrations
 ├── scripts/             # Database and experiment utilities
-├── saralv1/             # Preserved earlier implementation
+├── saralv1/             # Preserved earlier implementation — not used for v2 reproduction
 ├── DESIGN.md            # Experimental design and v1 → v2 history
 ├── README.md
 ├── alembic.ini
 └── requirements.txt
 ```
 
-The `saralv1/` directory preserves the earlier implementation for design-history purposes and should not be used when reproducing the v2 experiment.
-
-The application repository and the research archive serve different purposes:
-
-- this repository reproduces the **experimental instrument**;
-- the research archive reproduces the **study data and analysis**.
+`saralv1/` is preserved for design history only. Do not use it when reproducing the v2 experiment.
 
 ---
 
-# Reproducing the experiment
+## Environment
 
-## 1. Clone the repository
+The study ran on:
 
-```bash
-git clone https://github.com/ParthMody/SARAL.git
-cd SARAL
-git checkout v2
-```
+- **Python** <<< FILL: exact version, e.g. 3.11.9 >>>
+- **PostgreSQL** <<< FILL: version >>>
+- Dependency versions pinned in `requirements.txt`
 
-For exact reproduction of the reported study, use the frozen study tag or commit recorded in the research archive rather than an arbitrary later version of the branch.
+`requirements.txt` pins exact versions. Do not relax the pins when reproducing the reported study.
 
-For example:
+### Database
 
-```bash
-git checkout <study-tag-or-commit>
-```
+Data collection used PostgreSQL. The Docker command in the Quickstart reproduces that environment and is the canonical path.
 
-Do not reproduce the reported study from an arbitrary later commit.
-
----
-
-## 2. Create a Python environment
-
-SARAL requires Python 3.10 or later.
-
-```bash
-python -m venv .venv
-```
-
-Activate the environment.
-
-### macOS / Linux
-
-```bash
-source .venv/bin/activate
-```
-
-### Windows PowerShell
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
----
-
-## 3. Install dependencies
-
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-Application dependencies are defined in [`requirements.txt`](./requirements.txt).
-
-For exact reproduction, use the dependency versions recorded by the frozen study release.
-
----
-
-## 4. Configure the environment
-
-SARAL supports database configuration through `DATABASE_URL`.
-
-For local reproduction with SQLite:
-
-### macOS / Linux
+SQLite is supported as a convenience for interface inspection:
 
 ```bash
 export SARAL_ENV=development
 export DATABASE_URL=sqlite:///./saral.db
 ```
 
-### Windows PowerShell
+SQLite differs from PostgreSQL in type affinity and constraint enforcement. Use it to walk the participant-facing flow, not to reproduce the study.
 
-```powershell
-$env:SARAL_ENV="development"
-$env:DATABASE_URL="sqlite:///./saral.db"
-```
+### Configuration
 
-If the repository contains an `.env.example`, create a local environment file with:
-
-```bash
-cp .env.example .env
-```
-
-Only non-public deployment credentials should differ from the study configuration.
-
-No production secret should be required to reproduce the experimental behaviour locally.
+`DATABASE_URL` and `SARAL_ENV` are the only variables required for local reproduction. Copy `.env.example` to `.env` if you prefer a file-based configuration. No production secret is needed to reproduce the experimental behaviour locally.
 
 ---
 
-## 5. Initialise the database
+## Verifying a reproduction
 
-Apply the database migrations:
+After seeding, `scripts/verify_stimuli.py` confirms that the loaded stimulus set matches the study. It checks:
 
-```bash
-alembic upgrade head
-```
+- vignette count: <<< FILL: N >>>
+- cases per condition: <<< FILL: counts >>>
+- SHA-256 of the canonicalised stimulus set: <<< FILL: hash >>>
 
-This creates the database schema expected by the v2 application.
-
----
-
-## 6. Load the experimental stimuli
-
-Load the fixed vignette set used by the experiment:
-
-```bash
-python scripts/seed_cases.py
-```
-
-The seeding process should load the versioned v2 experimental stimuli rather than generate new cases probabilistically.
-
-Each vignette should preserve the study-defined:
-
-- vignette identifier;
-- structured applicant record;
-- algorithm recommendation;
-- field-note content;
-- experimental condition;
-- signal direction;
-- treatment/control status;
-- any metadata required by the assignment logic.
-
-The vignette set used during the reported study should be treated as immutable.
-
-Any substantive revision to a vignette should receive a new version rather than replacing the original stimulus.
-
----
-
-## 7. Run the instrument
-
-Start the local application:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-The application should then be available at:
+A correct reproduction lets a researcher complete the same participant-facing sequence used in the study:
 
 ```text
-http://127.0.0.1:8000
-```
-
-A successful reproduction should allow a researcher to complete the same participant-facing sequence used in the study:
-
-```text
-Consent
-→ Briefing
-→ Practice case
-→ Comprehension check
-→ 12 experimental cases
-→ Post-task survey
-```
-
-The former Railway-hosted production instance is no longer maintained.
-
----
-
-# Reproducibility requirements
-
-A valid reproduction of the v2 experiment requires the following components to be held fixed.
-
-## Software
-
-- study Git commit or tag;
-- Python version;
-- dependency versions;
-- database schema;
-- application logic.
-
-## Experimental materials
-
-- vignette set;
-- structured applicant records;
-- recommendation assignments;
-- field-note variants;
-- condition definitions;
-- eligibility rules;
-- participant instructions;
-- practice case;
-- comprehension-check content;
-- post-task survey.
-
-## Experimental procedure
-
-- twelve cases per participant;
-- randomisation procedure;
-- assignment logic;
-- presentation order;
-- response options;
-- final-on-submission decision behaviour;
-- timing capture;
-- written-rationale collection.
-
-## Analysis
-
-- sample inclusion and exclusion rules;
-- timing thresholds;
-- outcome coding;
-- repeated-measures structure;
-- estimator specification;
-- robustness checks;
-- figure and table generation.
-
-The repository reproduces the **instrument**.
-
-The associated research archive reproduces the **analysis**.
-
----
-
-# Randomisation and assignment
-
-Experimental assignment is handled by the application rather than manually.
-
-The participant sees only the currently assigned case and does not see treatment labels or internal assignment metadata.
-
-The application controls:
-
-- vignette selection;
-- recommendation/context pairing;
-- condition assignment;
-- case order;
-- session-level recording.
-
-The exact randomisation procedure used in the reported study is documented in [`DESIGN.md`](./DESIGN.md) and implemented in the v2 application code.
-
-A reproducer should be able to determine:
-
-- the unit of randomisation;
-- whether assignment occurs at the session or case level;
-- how case order is randomised;
-- how the four experimental combinations are represented within a session;
-- whether vignette selection occurs with or without replacement;
-- any balancing or composition constraints.
-
-If the production experiment used non-deterministic randomisation, exact reproduction means reproducing the **assignment mechanism**, not reconstructing the exact random sequence observed by each original participant.
-
----
-
-# Frozen study version
-
-The reported experiment should correspond to an immutable Git reference.
-
-The research archive should record:
-
-```text
-Git branch: v2
-Git tag: <study-tag>
-Git commit: <full-commit-SHA>
-```
-
-The branch itself may continue to evolve. The frozen tag or commit defines the exact experimental instrument associated with the reported study.
-
-A suitable naming convention is:
-
-```text
-v2-study-2026
-```
-
-or:
-
-```text
-study-2026-06
+Consent → Briefing → Practice case → Comprehension check → 12 cases → Post-task survey
 ```
 
 ---
 
-# Vignettes and domain adaptation
+## Reproducibility requirements
 
-The experimental vignette pool is a fixed research artifact.
+A valid reproduction of the v2 experiment holds the following fixed.
 
-Each vignette combines:
+**Software** — study Git tag/commit; Python version; dependency versions; database schema; application logic.
 
-- a structured applicant profile;
-- a machine recommendation;
-- a field observation;
-- a defined relationship between the field signal and recommendation.
+**Experimental materials** — vignette set; structured applicant records; recommendation assignments; field-note variants; condition definitions; eligibility rules; participant instructions; practice case; comprehension-check content; post-task survey.
 
-The welfare implementation is one instantiation of the broader SARAL decision architecture.
+**Procedure** — twelve cases per participant; randomisation and assignment logic; presentation order; response options; final-on-submission behaviour; timing capture; written-rationale collection.
 
-Conceptually:
+**Analysis** (research archive) — inclusion and exclusion rules; timing thresholds; outcome coding; repeated-measures structure; estimator specification; robustness checks; figure and table generation.
+
+---
+
+## Stimulus set
+
+The vignette pool is a fixed research artifact. Each vignette combines a structured applicant profile, a machine recommendation, a field observation, and a defined relationship between field signal and recommendation.
+
+`scripts/seed_cases.py` loads the versioned v2 stimuli; it does not generate cases probabilistically. Each vignette preserves its study-defined identifier, structured record, recommendation, field-note content, condition, signal direction, arm, and assignment metadata.
+
+The stimulus set used in the reported study is immutable. Any substantive revision creates a new version rather than replacing the original.
+
+---
+
+## Data and statistical reproducibility
+
+De-identified data and analysis code are in the research archive at [parthmody.me/saral-materials](https://www.parthmody.me/saral-materials), which contains the pre-registration and amendment, participant information and consent materials, governance protocol, experimental materials, de-identified raw exports, session-timing records, exclusion criteria, and analysis scripts.
+
+The analysis pipeline begins from the de-identified raw exports, not from a manually edited analytic dataset. Every transformation between raw export and analytic dataset is performed programmatically.
+
+A full reproduction regenerates participant inclusion and exclusion counts, analytic sample construction, override coding, descriptive statistics, primary treatment estimates, recommendation × signal-direction estimates, escalation/reversal decompositions, robustness specifications, and all reported figures and tables.
+
+---
+
+## Domain adaptation
+
+The welfare implementation is one instantiation of a more general decision architecture:
 
 ```text
 Structured information available to machine
@@ -463,204 +274,69 @@ Context available only to reviewer
 Human decision
 ```
 
-The same architecture can be adapted to another domain by replacing the domain-specific stimulus set while preserving:
+The architecture adapts to another domain by replacing the stimulus set while preserving recommendation presentation, contextual-evidence presentation, randomisation, decision recording, escalation, timing capture, and rationale collection.
 
-- recommendation presentation;
-- contextual-evidence presentation;
-- randomisation;
-- decision recording;
-- escalation;
-- timing capture;
-- written rationale collection.
+A modified stimulus set constitutes a new experimental version and does not overwrite the materials used in the reported welfare experiment.
 
-A modified stimulus set constitutes a new experimental version and should not overwrite the materials used in the reported welfare experiment.
+Any reuse in a new empirical setting should distinguish clearly between (1) the original v2 instrument, (2) modifications to the software, (3) changes to the stimulus set, (4) changes to procedure, and (5) changes to the analysis plan.
 
 ---
 
-# Data and statistical reproducibility
+## Ethics and research governance
 
-De-identified study data and analysis code are available at:
+The study was conducted independently under a documented self-governance protocol covering informed consent, voluntariness, withdrawal, data handling, and minimisation of personally identifying information. Institutional ethics review was sought and was not available to the investigator in this capacity.
 
-[parthmody.me/saral-materials](https://www.parthmody.me/saral-materials)
+All applicant profiles in the controlled experiment are composite, inspired by the field deployment. No experimental vignette corresponds to a real welfare applicant, and the instrument does not adjudicate real welfare claims.
 
-The archive includes:
+The governance protocol, participant information sheet, and consent materials are preserved in the research archive.
 
-- pre-registration;
-- pre-registration amendment;
-- participant information and consent materials;
-- governance protocol;
-- experimental materials;
-- de-identified raw exports;
-- session-timing records;
-- exclusion criteria;
-- analysis scripts.
+This repository is released as a research artifact. It is not a validated system for operational welfare adjudication, automated eligibility determination, or deployment in other consequential decision-making settings.
 
-The analysis pipeline should begin from de-identified raw exports rather than a manually edited analytic dataset.
-
-A full reproduction should regenerate:
-
-- participant inclusion and exclusion counts;
-- analytic sample construction;
-- override coding;
-- descriptive statistics;
-- primary treatment estimates;
-- recommendation × signal-direction estimates;
-- escalation/reversal decompositions;
-- robustness specifications;
-- reported figures;
-- reported tables.
-
-Any transformation between the raw export and final analytic dataset should be performed programmatically.
+Researchers reproducing or adapting the paradigm are responsible for obtaining any approvals required in their own jurisdiction or institution.
 
 ---
 
-# Instrument reproducibility vs statistical reproducibility
+## Research question
 
-SARAL has two distinct reproducibility layers.
-
-## Instrument reproducibility
-
-This repository reconstructs the environment in which participants made their decisions.
-
-It preserves:
-
-- the participant-facing interface;
-- experiment flow;
-- experimental stimuli;
-- assignment logic;
-- recommendation presentation;
-- contextual-information presentation;
-- decision recording;
-- response timing;
-- rationale collection.
-
-## Statistical reproducibility
-
-The research archive reconstructs the empirical results reported in the paper.
-
-It preserves:
-
-- de-identified observations;
-- data-cleaning logic;
-- exclusion rules;
-- outcome construction;
-- statistical models;
-- robustness checks;
-- figure generation;
-- table generation.
-
-Keeping these layers separate prevents the participant-facing experimental instrument from being conflated with downstream statistical analysis.
-
----
-
-# Ethics and research governance
-
-The study was conducted independently under a documented self-governance protocol covering:
-
-- informed consent;
-- voluntariness;
-- withdrawal;
-- data handling;
-- minimisation of personally identifying information.
-
-Institutional ethics review was not available to the investigator in this capacity.
-
-All applicant profiles used in the controlled experiment are synthetic.
-
-No experimental vignette corresponds to a real welfare applicant.
-
-The governance protocol, participant information sheet, and consent materials are preserved in the associated research archive.
-
-This repository is released as a research artifact. It should not be interpreted as a validated system for operational welfare adjudication, automated eligibility determination, or deployment in other consequential decision-making environments.
-
----
-
-# v1 → v2 design history
-
-SARAL originated as a live field-deployment system.
-
-The v1 implementation combined structured welfare records, machine-generated outputs, field observations, operator review, and written reasoning.
-
-The field deployment showed that reviewer decisions were often influenced by information that was not represented in the structured inputs available to the decision system.
-
-This created an identification problem.
-
-When a reviewer departed from the machine recommendation, the disagreement could reflect:
-
-- contextual evidence unavailable to the machine;
-- reviewer experience;
-- distrust of the system;
-- case difficulty;
-- institutional practice;
-- or several of these mechanisms simultaneously.
-
-v2 converted that observational problem into a controlled experiment.
-
-The redesign preserved the core decision architecture:
-
-```text
-Machine recommendation
-        +
-Reviewer-only information
-        +
-Human discretion
-```
-
-while experimentally controlling the relationship between the machine recommendation and contextual evidence.
-
-This makes it possible to study whether departures from an algorithmic recommendation are systematically responsive to information that the algorithm itself could not observe.
-
-The full conceptual and experimental history is documented in [`DESIGN.md`](./DESIGN.md).
-
----
-
-# Research question
-
-SARAL is not designed merely to measure whether people follow an algorithm.
-
-The underlying question is:
+SARAL is not designed to measure whether people follow an algorithm. The question is:
 
 > **Under what informational conditions do human reviewers comply with, reverse, or escalate an algorithmic recommendation?**
 
-A departure from an algorithm should not automatically be interpreted as algorithm aversion.
-
-If the reviewer possesses relevant evidence unavailable to the machine, disagreement may instead constitute evidence integration.
-
-The experimental design is intended to distinguish these mechanisms.
+Departure from an algorithmic recommendation is not automatically algorithm aversion. Where the reviewer holds relevant evidence the machine cannot observe, disagreement may instead constitute evidence integration. The design is built to distinguish these.
 
 ---
 
-# Ethics note on the field and experimental phases
+## Citation
 
-SARAL has both a field-development history and a controlled experimental implementation.
-
-The v2 experimental applicant profiles are synthetic, and the experimental instrument does not adjudicate real welfare claims.
-
-Materials describing the independent research-governance process, participant consent, data handling, and study procedures are maintained in the associated research archive.
-
-Researchers reproducing or adapting the paradigm are responsible for obtaining any ethics or institutional approvals required in their own jurisdiction or institution.
+> Mody, P. (2026). *SARAL: Field-Generated Context and Algorithmic Override in Welfare Decision-Making* (working paper). [](https://static1.squarespace.com/static/68d08a08b06391749b62502d/t/6a951205dfa7a85a69d4450c/1788154373626/When-Context-Contradicts-Algorithm_Draft1.pdf)
 
 ---
 
-# Citation
+## License
 
-If you use SARAL, its experimental design, or associated research materials, please cite:
+No open-source licence has currently been assigned to this repository.
 
-> Mody, P. (2026). *SARAL: Field-Generated Context and Algorithmic Override in Welfare Decision-Making* (working paper).  
-> https://static1.squarespace.com/static/68d08a08b06391749b62502d/t/6a951205dfa7a85a69d4450c/1788154373626/When-Context-Contradicts-Algorithm_Draft1.pdf
+Unless otherwise stated, the source code and materials in this repository remain
+copyrighted by the author. No permission is granted by default to reproduce,
+modify, redistribute, sublicense, or use the software for operational deployment.
+
+The repository is made publicly available for research transparency,
+reproducibility, academic review, and inspection.
+
+Researchers wishing to reuse, adapt, or redistribute SARAL or substantial parts
+of the implementation should contact the author for permission.
+
+Research materials distributed separately through the associated archive —
+including the paper, pre-registration, experimental stimuli, datasets, consent
+materials, and analysis outputs — may be subject to separate reuse terms stated
+with those materials.
 
 ---
 
-# Reuse
+## Contact
 
-The software in this repository is provided as a research artifact.
+**Parth Mody**  
+Email: [modyparth7@gmail.com](mailto:modyparth7@gmail.com)
 
-Research materials distributed through the associated archive, including the paper, pre-registration, stimuli, datasets, consent materials, and analysis outputs, may carry separate reuse terms.
-
-Any reuse of SARAL in a new empirical setting should clearly distinguish:
-
-1. the original v2 experimental instrument;
-2. modifications to the software;
-3. changes to the vignette set;
-4. changes to the experimental procedure;
-5. changes to the analysis plan.
+For questions concerning reproduction, research use, the experimental design,
+or access to associated materials, contact the author at the address above.
