@@ -1,5 +1,7 @@
 # SARAL v1.3
 
+Note- The version used by the working paper titled **When Context Contradicts the Algorithm: Conditional Reliance and the Anatomy of Override in Welfare Decisions** resides in branch v2
+
 A transparent, offline-first **research prototype** to study AI-assisted welfare access and human decision-making under algorithmic guidance.
 
 ## 1. Purpose
